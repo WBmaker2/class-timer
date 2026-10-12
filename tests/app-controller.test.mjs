@@ -52,6 +52,15 @@ function createMockDOM() {
       this.tabIndex = 0;
     }
 
+    contains(child) {
+      if (!child) return false;
+      if (child === this) return true;
+      if (this.children) {
+        return this.children.some(c => c === child || (c.contains && c.contains(child)));
+      }
+      return false;
+    }
+
     setAttribute(k, v) {
       this.attributes.set(k, String(v));
     }
@@ -136,7 +145,29 @@ function createMockDOM() {
     'input-minutes': new MockElement('input-minutes', 'input'),
     'input-seconds': new MockElement('input-seconds', 'input'),
     'btn-set-custom': new MockElement('btn-set-custom', 'button'),
+    'header-bar': new MockElement('header-bar', 'header'),
+    'controls-bar': new MockElement('controls-bar', 'footer')
   };
+
+  elements['header-bar'].classList.add('header-bar');
+  elements['header-bar'].children = [
+    elements['activity-title'],
+    elements['btn-mute'],
+    elements['btn-fullscreen']
+  ];
+
+  elements['controls-bar'].classList.add('controls-bar');
+  elements['controls-bar'].children = [
+    elements['preset-5'],
+    elements['preset-10'],
+    elements['preset-15'],
+    elements['btn-toggle-start'],
+    elements['btn-reset'],
+    elements['btn-add-minute'],
+    elements['input-minutes'],
+    elements['input-seconds'],
+    elements['btn-set-custom']
+  ];
 
   elements['activity-title'].textContent = '수업 활동 시간';
   elements['btn-mute'].textContent = '🔔';
@@ -171,6 +202,11 @@ function createMockDOM() {
     },
     getElementById(id) {
       return elements[id] || null;
+    },
+    querySelector(selector) {
+      if (selector === '.header-bar' || selector === '#header-bar') return elements['header-bar'];
+      if (selector === '.controls-bar' || selector === '#controls-bar') return elements['controls-bar'];
+      return null;
     },
     addEventListener(event, handler) {
       if (!docListeners.has(event)) docListeners.set(event, []);
@@ -625,6 +661,36 @@ describe('State Synchronization & Audio Triggers', () => {
     assert.equal(mock.elements['btn-toggle-start'].textContent, '커스텀상태');
     assert.equal(mock.document.body.classList.contains('state-warning'), false);
   });
+
+  test('adds is-hours class when remainingSeconds >= 3600 and removes when < 3600', () => {
+    const mock = createMockDOM();
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: mock.storage
+    });
+
+    // Default 5 mins (300s) -> no is-hours
+    assert.equal(mock.elements['timer-display'].classList.contains('is-hours'), false);
+
+    // Set custom 60 mins (3600s)
+    mock.elements['input-minutes'].value = '60';
+    mock.elements['input-seconds'].value = '0';
+    mock.elements['btn-set-custom'].click();
+    assert.equal(mock.elements['timer-display'].classList.contains('is-hours'), true);
+
+    // Tick down to 3599s -> is-hours removed
+    app.handleTick({
+      remainingSeconds: 3599,
+      totalDuration: 3600,
+      isRunning: true,
+      isWarning: false,
+      isFinished: false
+    });
+    assert.equal(mock.elements['timer-display'].classList.contains('is-hours'), false);
+
+    app.destroy();
+  });
 });
 
 describe('Auto-hide Controls (Inactivity)', () => {
@@ -730,6 +796,37 @@ describe('Auto-hide Controls (Inactivity)', () => {
 
     // Wait past inactivity timeout
     await new Promise(r => setTimeout(r, 140));
+    assert.equal(mock.document.body.classList.contains('controls-hidden'), true);
+
+    app.destroy();
+  });
+
+  test('does not add controls-hidden while keyboard focus is inside header-bar or controls-bar', async () => {
+    const mock = createMockDOM();
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: mock.storage,
+      inactivityTimeoutMs: 10
+    });
+
+    mock.elements['btn-toggle-start'].click();
+    assert.equal(mock.document.body.classList.contains('controls-hidden'), false);
+
+    // Focus element in controls-bar (btn-reset)
+    mock.elements['btn-reset'].focus();
+    await new Promise(r => setTimeout(r, 25));
+    assert.equal(mock.document.body.classList.contains('controls-hidden'), false);
+
+    // Focus element in header-bar (btn-mute)
+    mock.elements['btn-mute'].focus();
+    await new Promise(r => setTimeout(r, 25));
+    assert.equal(mock.document.body.classList.contains('controls-hidden'), false);
+
+    // Move focus back to body (outside header-bar and controls-bar)
+    mock.elements['btn-mute'].blur();
+    mock.window.dispatchEvent({ type: 'mousemove' });
+    await new Promise(r => setTimeout(r, 25));
     assert.equal(mock.document.body.classList.contains('controls-hidden'), true);
 
     app.destroy();
@@ -860,4 +957,40 @@ describe('Keyboard Shortcuts', () => {
 
     app.destroy();
   });
+
+  test('Space is not intercepted when activeElement is a button other than btnToggleStart', () => {
+    const mock = createMockDOM();
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: mock.storage
+    });
+
+    // When focused on btn-reset, Space should NOT prevent default or toggle timer
+    mock.elements['btn-reset'].focus();
+    let prevented = false;
+    mock.window.dispatchEvent({
+      type: 'keydown',
+      code: 'Space',
+      key: ' ',
+      preventDefault: () => { prevented = true; }
+    });
+    assert.equal(app.timer.isRunning, false);
+    assert.equal(prevented, false);
+
+    // When focused on btn-toggle-start, Space SHOULD prevent default and toggle start
+    mock.elements['btn-toggle-start'].focus();
+    prevented = false;
+    mock.window.dispatchEvent({
+      type: 'keydown',
+      code: 'Space',
+      key: ' ',
+      preventDefault: () => { prevented = true; }
+    });
+    assert.equal(app.timer.isRunning, true);
+    assert.equal(prevented, true);
+
+    app.destroy();
+  });
 });
+

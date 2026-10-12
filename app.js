@@ -60,6 +60,8 @@ export class AppController {
 
   _bindElements() {
     if (!this.doc) return;
+    this.headerBar = this.doc.querySelector?.('.header-bar') || this.doc.getElementById?.('header-bar') || null;
+    this.controlsBar = this.doc.querySelector?.('.controls-bar') || this.doc.getElementById?.('controls-bar') || null;
     this.activityTitle = this.doc.getElementById('activity-title');
     this.btnMute = this.doc.getElementById('btn-mute');
     this.btnFullscreen = this.doc.getElementById('btn-fullscreen');
@@ -314,6 +316,15 @@ export class AppController {
       this.timerDisplay.textContent = formatted;
     }
 
+    // Font scaling for >= 1 hour (HH:MM:SS)
+    if (this.timerDisplay) {
+      if (state.remainingSeconds >= 3600) {
+        this.timerDisplay.classList.add('is-hours');
+      } else {
+        this.timerDisplay.classList.remove('is-hours');
+      }
+    }
+
     // Progress bar width & aria attributes (only mutate DOM if changed)
     if (this.progressBar) {
       const pct = state.totalDuration > 0
@@ -410,8 +421,17 @@ export class AppController {
     this.clearInactivityTimer();
     if (!this.timer || !this.timer.isRunning) return;
 
+    const active = this.doc ? this.doc.activeElement : null;
+    if (active && (this.headerBar?.contains?.(active) || this.controlsBar?.contains?.(active))) {
+      return;
+    }
+
     this.inactivityTimer = setTimeout(() => {
       if (this.timer && this.timer.isRunning && this.doc && this.doc.body) {
+        const currentActive = this.doc.activeElement;
+        if (currentActive && (this.headerBar?.contains?.(currentActive) || this.controlsBar?.contains?.(currentActive))) {
+          return;
+        }
         this.doc.body.classList.add('controls-hidden');
       }
     }, this.inactivityTimeoutMs);
@@ -429,6 +449,11 @@ export class AppController {
       this.doc.body.classList.remove('controls-hidden');
     }
     if (this.timer && this.timer.isRunning) {
+      const active = this.doc ? this.doc.activeElement : null;
+      if (active && (this.headerBar?.contains?.(active) || this.controlsBar?.contains?.(active))) {
+        this.clearInactivityTimer();
+        return;
+      }
       const now = Date.now();
       const throttleInterval = Math.min(150, Math.floor(this.inactivityTimeoutMs / 2));
       if (!this._lastActivityReschedule || (now - this._lastActivityReschedule >= throttleInterval)) {
@@ -468,6 +493,9 @@ export class AppController {
 
     // Space: toggle start/pause
     if (e.code === 'Space' || e.key === ' ') {
+      if (active && active.tagName === 'BUTTON' && active !== this.btnToggleStart) {
+        return;
+      }
       if (typeof e.preventDefault === 'function') e.preventDefault();
       this.toggleStart();
       return;

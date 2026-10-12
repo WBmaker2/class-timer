@@ -165,6 +165,10 @@ html, body {
   transform-origin: center center;
 }
 
+#timer-display.is-hours {
+  font-size: min(18vw, 36vh);
+}
+
 /* Progress Bar Container */
 .progress-bar-container,
 #progress-bar-container {
@@ -467,8 +471,28 @@ body.controls-hidden .controls-bar,
   transition: opacity 0.4s ease;
 }
 
+body.controls-hidden .header-bar:focus-within,
+body.controls-hidden .controls-bar:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 body.controls-hidden {
   cursor: none;
+}
+
+/* 4. Accessibility: prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  body.state-finished,
+  .state-finished,
+  .state-warning #timer-display,
+  body.state-warning #timer-display {
+    animation: none;
+  }
+  body.state-finished,
+  .state-finished {
+    background-color: #991b1b;
+  }
 }
 
 /* ==========================================================================

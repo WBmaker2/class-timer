@@ -132,4 +132,20 @@ describe('Task 3: Classroom TV CSS Styling (style.css)', () => {
   test('btn-toggle-start has prominent highlight styling', () => {
     assert.match(cssContent, /#btn-toggle-start[\s\S]*?box-shadow/);
   });
+
+  test('body.controls-hidden restores opacity and pointer-events on focus-within for header and controls', () => {
+    assert.match(cssContent, /body\.controls-hidden\s+\.header-bar:focus-within/);
+    assert.match(cssContent, /body\.controls-hidden\s+\.controls-bar:focus-within/);
+  });
+
+  test('supports prefers-reduced-motion media query to disable animations and retain solid finish background', () => {
+    assert.match(cssContent, /@media\s*\(\s*prefers-reduced-motion:\s*reduce\s*\)/);
+    assert.match(cssContent, /prefers-reduced-motion[\s\S]*?animation\s*:\s*none/);
+    assert.match(cssContent, /prefers-reduced-motion[\s\S]*?background-color\s*:\s*#991b1b/);
+  });
+
+  test('timer-display defines font scaling for >= 1 hour (.is-hours)', () => {
+    assert.match(cssContent, /#timer-display\.is-hours[\s\S]*?font-size\s*:\s*min\(\s*18vw\s*,\s*36vh\s*\)/);
+  });
 });
+
