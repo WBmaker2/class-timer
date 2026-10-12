@@ -110,11 +110,18 @@ describe('SoundEngine Web Audio API playback with mock AudioContext', () => {
       this.connectedTo = null;
       this.startedAt = null;
       this.stoppedAt = null;
+      this.onended = null;
+      this.disconnected = false;
       createdOscillators.push(this);
     }
 
     connect(target) {
       this.connectedTo = target;
+    }
+
+    disconnect() {
+      this.connectedTo = null;
+      this.disconnected = true;
     }
 
     start(time) {
@@ -130,11 +137,17 @@ describe('SoundEngine Web Audio API playback with mock AudioContext', () => {
     constructor() {
       this.gain = new MockAudioParam(1);
       this.connectedTo = null;
+      this.disconnected = false;
       createdGains.push(this);
     }
 
     connect(target) {
       this.connectedTo = target;
+    }
+
+    disconnect() {
+      this.connectedTo = null;
+      this.disconnected = true;
     }
   }
 
@@ -179,56 +192,133 @@ describe('SoundEngine Web Audio API playback with mock AudioContext', () => {
     }
   });
 
-  test('init creates AudioContext lazily and resumes if suspended', () => {
+  test('init creates AudioContext and masterGain lazily and resumes if suspended', () => {
     const sound = new SoundEngine();
     sound.init();
 
     assert.equal(resumeCallCount, 1);
+    assert.ok(sound.masterGain);
+    assert.equal(sound.masterGain.connectedTo, sound.audioCtx.destination);
+    assert.equal(sound.masterGain.gain.value, 1);
   });
 
-  test('playWarningDing plays 2 tones (C5 523.25Hz, G5 783.99Hz)', () => {
+  test('masterGain initializes with 0 when isMuted is true', () => {
+    const sound = new SoundEngine({ isMuted: true });
+    sound.init();
+
+    assert.ok(sound.masterGain);
+    assert.equal(sound.masterGain.gain.value, 0);
+  });
+
+  test('masterGain provides instant muting and restores to 1 on unmute', () => {
+    const sound = new SoundEngine();
+    sound.init();
+
+    assert.equal(sound.masterGain.gain.value, 1);
+
+    // Mute immediately sets masterGain to 0
+    sound.toggleMute();
+    assert.equal(sound.masterGain.gain.value, 0);
+
+    // Unmute immediately restores masterGain to 1
+    sound.toggleMute();
+    assert.equal(sound.masterGain.gain.value, 1);
+
+    // setMute explicitly
+    sound.setMute(true);
+    assert.equal(sound.masterGain.gain.value, 0);
+
+    sound.setMute(false);
+    assert.equal(sound.masterGain.gain.value, 1);
+  });
+
+  test('self-heals audio context when state is closed', () => {
+    const sound = new SoundEngine();
+    sound.init();
+
+    const originalCtx = sound.audioCtx;
+    const originalMasterGain = sound.masterGain;
+
+    // Simulate browser closing AudioContext (e.g., system sleep or device change)
+    sound.audioCtx.state = 'closed';
+
+    // Next interaction should recreate AudioContext and masterGain
+    sound.init();
+
+    assert.notEqual(sound.audioCtx, originalCtx);
+    assert.notEqual(sound.masterGain, originalMasterGain);
+    assert.equal(sound.masterGain.connectedTo, sound.audioCtx.destination);
+  });
+
+  test('playWarningDing routes tones to masterGain and cleans up nodes on onended', () => {
     const sound = new SoundEngine();
     sound.playWarningDing();
 
+    // 1 master gain + 2 tone gains = 3 gains
+    assert.equal(createdGains.length, 3);
     assert.equal(createdOscillators.length, 2);
-    assert.equal(createdGains.length, 2);
 
+    const masterGain = createdGains[0];
     const [firstOsc, secondOsc] = createdOscillators;
-    const [firstGain, secondGain] = createdGains;
+    const firstGain = createdGains[1];
+    const secondGain = createdGains[2];
+
+    assert.equal(masterGain.connectedTo, sound.audioCtx.destination);
+    assert.equal(firstOsc.connectedTo, firstGain);
+    assert.equal(firstGain.connectedTo, masterGain);
+    assert.equal(secondOsc.connectedTo, secondGain);
+    assert.equal(secondGain.connectedTo, masterGain);
 
     assert.equal(firstOsc.type, 'sine');
     assert.equal(firstOsc.frequency.value, 523.25);
     assert.equal(firstOsc.startedAt, 10.0);
     assert.equal(firstOsc.stoppedAt, 10.0 + 0.25);
-    assert.equal(firstOsc.connectedTo, firstGain);
-    assert.equal(firstGain.connectedTo, sound.audioCtx.destination);
 
     assert.equal(secondOsc.type, 'sine');
     assert.equal(secondOsc.frequency.value, 783.99);
     assert.equal(secondOsc.startedAt, 10.22);
     assert.equal(secondOsc.stoppedAt, 10.22 + 0.45);
-    assert.equal(secondGain.connectedTo, sound.audioCtx.destination);
+
+    // Test onended cleanup
+    assert.equal(typeof firstOsc.onended, 'function');
+    assert.equal(firstOsc.disconnected, false);
+    assert.equal(firstGain.disconnected, false);
+
+    firstOsc.onended();
+
+    assert.equal(firstOsc.disconnected, true);
+    assert.equal(firstGain.disconnected, true);
   });
 
-  test('playFinishChime plays 4 notes (E5, C5, D5, G4) and subtle harmonics', () => {
+  test('playFinishChime routes 4 notes and harmonics to masterGain', () => {
     const sound = new SoundEngine();
     sound.playFinishChime();
 
-    // 4 notes * 2 (fundamental + harmonic) = 8 oscillators
+    // 1 masterGain + 8 tone gains = 9 gains
+    assert.equal(createdGains.length, 9);
     assert.equal(createdOscillators.length, 8);
-    assert.equal(createdGains.length, 8);
 
+    const masterGain = sound.masterGain;
     const baseFrequencies = [659.25, 523.25, 587.33, 392.00];
 
     for (let i = 0; i < 4; i++) {
       const fundOsc = createdOscillators[i * 2];
       const harmOsc = createdOscillators[i * 2 + 1];
+      const fundGain = createdGains[1 + i * 2];
+      const harmGain = createdGains[1 + i * 2 + 1];
 
       assert.equal(fundOsc.type, 'triangle');
       assert.equal(fundOsc.frequency.value, baseFrequencies[i]);
+      assert.equal(fundGain.connectedTo, masterGain);
 
       assert.equal(harmOsc.type, 'sine');
       assert.equal(harmOsc.frequency.value, baseFrequencies[i] * 2);
+      assert.equal(harmGain.connectedTo, masterGain);
+
+      assert.equal(typeof fundOsc.onended, 'function');
+      fundOsc.onended();
+      assert.equal(fundOsc.disconnected, true);
+      assert.equal(fundGain.disconnected, true);
     }
   });
 

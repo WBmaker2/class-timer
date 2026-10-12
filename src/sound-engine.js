@@ -6,11 +6,12 @@ export class SoundEngine {
   constructor({ isMuted = false } = {}) {
     this.muted = Boolean(isMuted);
     this.audioCtx = null;
+    this.masterGain = null;
   }
 
   /**
-   * Lazily retrieve or create AudioContext instance.
-   * Handles autoplay restrictions by resuming suspended audio context.
+   * Lazily retrieve or create AudioContext instance with master gain control.
+   * Handles autoplay restrictions and self-heals if context was closed.
    * @returns {AudioContext|null}
    */
   _getAudioContext() {
@@ -18,11 +19,24 @@ export class SoundEngine {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return null;
 
-    if (!this.audioCtx) {
+    if (!this.audioCtx || this.audioCtx.state === 'closed') {
       try {
         this.audioCtx = new AudioContextClass();
+        this.masterGain = null;
       } catch {
+        this.audioCtx = null;
+        this.masterGain = null;
         return null;
+      }
+    }
+
+    if (this.audioCtx && !this.masterGain) {
+      try {
+        this.masterGain = this.audioCtx.createGain();
+        this.masterGain.gain.setValueAtTime(this.muted ? 0 : 1, this.audioCtx.currentTime);
+        this.masterGain.connect(this.audioCtx.destination);
+      } catch {
+        // Fallback if destination connection fails
       }
     }
 
@@ -41,6 +55,19 @@ export class SoundEngine {
   }
 
   /**
+   * Update master gain immediately when mute state changes.
+   */
+  _updateMasterGain() {
+    if (!this.audioCtx || !this.masterGain) return;
+    try {
+      const targetGain = this.muted ? 0 : 1;
+      this.masterGain.gain.setValueAtTime(targetGain, this.audioCtx.currentTime);
+    } catch {
+      // Safe fallback if audio context is in an invalid state
+    }
+  }
+
+  /**
    * Initialize audio context on explicit user gesture (click/keydown).
    */
   init() {
@@ -53,6 +80,7 @@ export class SoundEngine {
    */
   toggleMute() {
     this.muted = !this.muted;
+    this._updateMasterGain();
     return this.muted;
   }
 
@@ -62,6 +90,7 @@ export class SoundEngine {
    */
   setMute(isMuted) {
     this.muted = Boolean(isMuted);
+    this._updateMasterGain();
   }
 
   /**
@@ -74,6 +103,7 @@ export class SoundEngine {
 
   /**
    * Play a single synthesized tone with exponential decay envelope.
+   * Routes through persistent masterGain and cleans up nodes on oscillator end.
    * @param {number} freq - Frequency in Hz
    * @param {number} startTime - Start time in seconds (relative to ctx.currentTime)
    * @param {number} duration - Duration in seconds
@@ -95,7 +125,16 @@ export class SoundEngine {
       gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.masterGain || ctx.destination);
+
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {
+          // Ignore errors during disconnect
+        }
+      };
 
       osc.start(startTime);
       osc.stop(startTime + duration);
