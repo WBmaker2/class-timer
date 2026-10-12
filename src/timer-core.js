@@ -61,9 +61,17 @@ export class TimerEngine {
     this.warningFired = false;
   }
 
+  _stopInterval() {
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+  }
+
   setDuration(seconds) {
     const valid = Math.max(0, Math.floor(Number(seconds) || 0));
-    this.pause();
+    this._stopInterval();
+    this.isRunning = false;
     this.totalDuration = valid;
     this.remainingSeconds = valid;
     this.warningFired = false;
@@ -71,8 +79,8 @@ export class TimerEngine {
   }
 
   addSeconds(seconds) {
-    if (this.isFinished()) return;
     const added = Math.max(0, Math.floor(Number(seconds) || 0));
+    if (added === 0) return;
     this.remainingSeconds = Math.max(0, this.remainingSeconds + added);
     this.totalDuration = Math.max(this.totalDuration, this.remainingSeconds);
     if (this.remainingSeconds > 60) {
@@ -89,7 +97,7 @@ export class TimerEngine {
 
     this.timerId = setInterval(() => {
       const now = Date.now();
-      const elapsed = (now - this.lastTimestamp) / 1000;
+      const elapsed = Math.max(0, (now - this.lastTimestamp) / 1000);
       this.lastTimestamp = now;
 
       this.remainingSeconds = Math.max(0, this.remainingSeconds - elapsed);
@@ -100,35 +108,35 @@ export class TimerEngine {
         this.onWarning(roundedRemaining);
       }
 
-      this._notify();
-
       if (this.remainingSeconds <= 0) {
-        this.pause();
+        this._stopInterval();
         this.remainingSeconds = 0;
+        this.isRunning = false;
         this.onFinish();
         this._notify();
+        return;
       }
+
+      this._notify();
     }, 100);
   }
 
   pause() {
-    if (this.timerId) {
-      clearInterval(this.timerId);
-      this.timerId = null;
-    }
+    this._stopInterval();
     this.isRunning = false;
     this._notify();
   }
 
   reset() {
-    this.pause();
+    this._stopInterval();
+    this.isRunning = false;
     this.remainingSeconds = this.totalDuration;
     this.warningFired = false;
     this._notify();
   }
 
   isFinished() {
-    return this.remainingSeconds <= 0;
+    return this.remainingSeconds <= 0 && this.totalDuration > 0;
   }
 
   getState() {
@@ -139,7 +147,7 @@ export class TimerEngine {
       totalDuration: this.totalDuration,
       isRunning: this.isRunning,
       isWarning: rounded > 0 && rounded <= 60,
-      isFinished: this.remainingSeconds <= 0 && this.totalDuration > 0
+      isFinished: this.isFinished()
     };
   }
 

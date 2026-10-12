@@ -42,11 +42,62 @@ describe('TimerEngine lifecycle and states', () => {
     assert.equal(initialState.isRunning, false);
     assert.equal(initialState.isWarning, false);
     assert.equal(initialState.isFinished, false);
+    assert.equal(timer.isFinished(), false);
 
     timer.setDuration(600);
     const updatedState = timer.getState();
     assert.equal(updatedState.remainingSeconds, 600);
     assert.equal(updatedState.totalDuration, 600);
+  });
+
+  test('isFinished is consistent between isFinished() and getState().isFinished', () => {
+    const timer = new TimerEngine();
+    // Default 300s
+    assert.equal(timer.isFinished(), false);
+    assert.equal(timer.getState().isFinished, false);
+
+    // setDuration(0): totalDuration is 0, so not in finished state
+    timer.setDuration(0);
+    assert.equal(timer.isFinished(), false);
+    assert.equal(timer.getState().isFinished, false);
+
+    // Duration > 0 and remaining reaches 0
+    timer.setDuration(10);
+    timer.remainingSeconds = 0;
+    assert.equal(timer.isFinished(), true);
+    assert.equal(timer.getState().isFinished, true);
+  });
+
+  test('setDuration and reset emit exactly one atomic notification with fresh state', () => {
+    let notifyCount = 0;
+    const states = [];
+    const timer = new TimerEngine({
+      onStateChange: (state) => {
+        notifyCount++;
+        states.push({ ...state });
+      }
+    });
+
+    // initial call: setDuration
+    notifyCount = 0;
+    states.length = 0;
+    timer.setDuration(120);
+
+    assert.equal(notifyCount, 1);
+    assert.equal(states[0].remainingSeconds, 120);
+    assert.equal(states[0].totalDuration, 120);
+    assert.equal(states[0].isRunning, false);
+
+    // run and then reset
+    timer.start();
+    notifyCount = 0;
+    states.length = 0;
+    timer.reset();
+
+    assert.equal(notifyCount, 1);
+    assert.equal(states[0].remainingSeconds, 120);
+    assert.equal(states[0].totalDuration, 120);
+    assert.equal(states[0].isRunning, false);
   });
 
   test('addSeconds increases remaining time and extends totalDuration if exceeded', () => {
@@ -64,6 +115,19 @@ describe('TimerEngine lifecycle and states', () => {
     state = timer.getState();
     assert.equal(state.remainingSeconds, 110);
     assert.equal(state.totalDuration, 300);
+  });
+
+  test('addSeconds allows extending time when timer was finished', () => {
+    const timer = new TimerEngine();
+    timer.setDuration(10);
+    timer.remainingSeconds = 0;
+    assert.equal(timer.isFinished(), true);
+
+    timer.addSeconds(60);
+    const state = timer.getState();
+    assert.equal(state.remainingSeconds, 60);
+    assert.equal(state.isFinished, false);
+    assert.equal(timer.isFinished(), false);
   });
 
   test('warning flag behaves correctly around 60 seconds threshold', () => {
@@ -109,22 +173,26 @@ describe('TimerEngine lifecycle and states', () => {
     assert.ok(stateChangeCount > 0);
   });
 
-  test('timer counts down, triggers warning once and onFinish when reaching 0', (t) => {
+  test('timer counts down, triggers warning once and exactly one notification on finish with consistent state', (t) => {
     t.mock.timers.enable({ apis: ['setInterval', 'Date'] });
 
     let warningCallCount = 0;
     let finishedCalled = false;
+    const ticks = [];
 
     const timer = new TimerEngine({
       onWarning: () => { warningCallCount++; },
-      onFinish: () => { finishedCalled = true; }
+      onFinish: () => { finishedCalled = true; },
+      onTick: (state) => { ticks.push({ ...state }); }
     });
 
     // Start with 62 seconds
     timer.setDuration(62);
     assert.equal(timer.getState().isWarning, false);
 
+    ticks.length = 0;
     timer.start();
+    assert.equal(ticks.length, 1); // start notification
 
     // Advance 3 seconds (30 intervals of 100ms)
     t.mock.timers.tick(3000);
@@ -136,27 +204,30 @@ describe('TimerEngine lifecycle and states', () => {
 
     // Advance another 20 seconds
     t.mock.timers.tick(20000);
-    // Warning should NOT trigger again
     assert.equal(warningCallCount, 1);
     assert.equal(timer.getState().remainingSeconds, 39);
 
-    // Advance remaining 39 seconds to hit 0
-    t.mock.timers.tick(39000);
+    // Record count before the final countdown to 0
+    ticks.length = 0;
+
+    // Advance 39.5 seconds to cross 0
+    t.mock.timers.tick(39500);
 
     const finalState = timer.getState();
     assert.equal(finalState.remainingSeconds, 0);
     assert.equal(finalState.isRunning, false);
     assert.equal(finalState.isFinished, true);
     assert.equal(finishedCalled, true);
-  });
 
-  test('addSeconds does nothing when timer is finished', () => {
-    const timer = new TimerEngine();
-    timer.setDuration(0);
-    assert.equal(timer.isFinished(), true);
+    // Verify the very last emitted notification has isRunning === false and remainingSeconds === 0
+    const lastTick = ticks[ticks.length - 1];
+    assert.equal(lastTick.remainingSeconds, 0);
+    assert.equal(lastTick.isRunning, false);
+    assert.equal(lastTick.isFinished, true);
 
-    timer.addSeconds(60);
-    assert.equal(timer.getState().remainingSeconds, 0);
+    // Verify there was no intermediate tick where remainingSeconds === 0 while isRunning === true
+    const illegalTick = ticks.find(tk => tk.remainingSeconds === 0 && tk.isRunning === true);
+    assert.equal(illegalTick, undefined);
   });
 
   test('calling start when already running or with 0 seconds is ignored', () => {
@@ -220,4 +291,3 @@ describe('TimerEngine lifecycle and states', () => {
     timer.pause();
   });
 });
-
