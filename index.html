@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>수업용 타이머 - Classroom TV Timer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header Bar -->
+    <header class="header-bar">
+      <div class="title-container">
+        <h1 id="activity-title" title="활동명을 클릭하여 변경할 수 있습니다" tabindex="0">수업 활동 시간</h1>
+      </div>
+      <div class="header-actions">
+        <button id="btn-mute" type="button" class="btn-icon" aria-label="음소거 토글" title="음소거 토글">🔔</button>
+        <button id="btn-fullscreen" type="button" class="btn-icon" aria-label="전체화면 토글" title="전체화면 토글">⛶</button>
+      </div>
+    </header>
+
+    <!-- Main Display Area -->
+    <main class="display-section">
+      <div id="finish-banner" class="finish-banner" role="alert" aria-live="assertive">
+        🔔 활동 시간이 종료되었습니다!
+      </div>
+      <div id="timer-display" class="timer-display" aria-label="남은 시간" role="timer">05:00</div>
+      <div id="progress-bar-container" class="progress-bar-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+    </main>
+
+    <!-- Controls Bar -->
+    <footer class="controls-bar">
+      <!-- Preset section -->
+      <div class="controls-section presets-section" aria-label="시간 프리셋">
+        <button id="preset-5" type="button" class="btn btn-preset">5분</button>
+        <button id="preset-10" type="button" class="btn btn-preset">10분</button>
+        <button id="preset-15" type="button" class="btn btn-preset">15분</button>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="controls-section actions-section">
+        <button id="btn-toggle-start" type="button" class="btn btn-primary" aria-label="시작 및 일시정지">시작</button>
+        <button id="btn-reset" type="button" class="btn btn-secondary" aria-label="타이머 초기화">초기화</button>
+        <button id="btn-add-minute" type="button" class="btn btn-secondary" aria-label="1분 추가">+1분</button>
+      </div>
+
+      <!-- Custom input section -->
+      <div class="controls-section custom-section" aria-label="사용자 지정 시간">
+        <div class="input-wrapper">
+          <input type="number" id="input-minutes" min="0" max="999" placeholder="분" aria-label="분 입력">
+          <span class="unit-label">분</span>
+        </div>
+        <div class="input-wrapper">
+          <input type="number" id="input-seconds" min="0" max="59" placeholder="초" aria-label="초 입력">
+          <span class="unit-label">초</span>
+        </div>
+        <button id="btn-set-custom" type="button" class="btn btn-secondary">설정</button>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

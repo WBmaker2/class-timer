@@ -1,0 +1,488 @@
+/* ==========================================================================
+   Classroom TV Web Timer - Modern High-Visibility Styling
+   Optimized for large classroom TV displays (8-10m readability)
+   ========================================================================== */
+
+:root {
+  --bg-primary: #0b0f19;
+  --bg-secondary: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-surface-hover: #334155;
+  --border-subtle: rgba(255, 255, 255, 0.12);
+  --border-focus: #38bdf8;
+
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+
+  --timer-normal: #10b981;
+  --timer-normal-glow: rgba(16, 185, 129, 0.28);
+  --timer-warning: #fbbf24;
+  --timer-warning-glow: rgba(245, 158, 11, 0.45);
+  --timer-finished: #ef4444;
+
+  --btn-primary-bg: #10b981;
+  --btn-primary-text: #052e16;
+  --btn-primary-hover: #34d399;
+
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Pretendard", "Noto Sans KR", sans-serif;
+  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  position: relative;
+  user-select: none;
+  background-color: transparent;
+}
+
+/* ==========================================================================
+   Header Bar
+   ========================================================================== */
+
+.header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 2.5rem;
+  z-index: 20;
+  transition: opacity 0.4s ease;
+}
+
+.title-container {
+  display: flex;
+  align-items: center;
+  max-width: 70%;
+}
+
+#activity-title {
+  font-size: clamp(1.25rem, 2.2vw, 2.2rem);
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px dashed transparent;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#activity-title:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+#activity-title:focus-visible {
+  outline: 2px solid var(--border-focus);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  width: 3.25rem;
+  height: 3.25rem;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-icon:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px);
+}
+
+.btn-icon:active {
+  transform: translateY(0);
+}
+
+.btn-icon:focus-visible {
+  outline: 2px solid var(--border-focus);
+}
+
+/* ==========================================================================
+   Main Display Area
+   ========================================================================== */
+
+.display-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+  padding: 0 1.5rem;
+}
+
+#timer-display {
+  font-variant-numeric: tabular-nums;
+  font-size: min(28vw, 46vh);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--timer-normal);
+  text-shadow: 0 0 50px var(--timer-normal-glow);
+  text-align: center;
+  user-select: none;
+  transition: color 0.4s ease, text-shadow 0.4s ease;
+  will-change: transform, opacity;
+  transform-origin: center center;
+}
+
+/* Progress Bar Container */
+.progress-bar-container,
+#progress-bar-container {
+  width: min(84vw, 1100px);
+  height: 12px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+  margin-top: clamp(1rem, 2.5vh, 2.5rem);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+#progress-bar {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #059669, #34d399);
+  border-radius: 9999px;
+  transition: width 0.25s linear, background 0.4s ease;
+}
+
+/* Finish Banner Overlay */
+#finish-banner {
+  display: none;
+  position: absolute;
+  top: 8%;
+  left: 50%;
+  transform: translate(-50%, 0);
+  z-index: 30;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(15, 23, 42, 0.96);
+  border: 3px solid #f59e0b;
+  border-radius: 1.25rem;
+  padding: 1.25rem 3rem;
+  font-size: clamp(1.5rem, 3.2vw, 2.75rem);
+  font-weight: 800;
+  color: #fbbf24;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 35px rgba(245, 158, 11, 0.5);
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Controls Bar
+   ========================================================================== */
+
+.controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2.5rem;
+  gap: 1.5rem;
+  z-index: 20;
+  transition: opacity 0.4s ease;
+}
+
+.controls-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Buttons Base */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 1.1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  user-select: none;
+  white-space: nowrap;
+  padding: 0.75rem 1.4rem;
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+}
+
+/* Preset Buttons */
+.btn-preset {
+  background: var(--bg-surface);
+  color: var(--text-main);
+  min-width: 4.8rem;
+}
+
+.btn-preset:hover {
+  background: var(--bg-surface-hover);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px);
+}
+
+.btn-preset.active {
+  border-color: var(--timer-normal);
+  color: var(--timer-normal);
+  background: rgba(16, 185, 129, 0.15);
+}
+
+/* Action Buttons */
+.actions-section {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+#btn-toggle-start {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-size: 1.35rem;
+  font-weight: 800;
+  padding: 0.85rem 2.4rem;
+  min-width: 7.5rem;
+  border: none;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+}
+
+#btn-toggle-start:hover {
+  background: var(--btn-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(16, 185, 129, 0.55);
+}
+
+#btn-toggle-start.is-paused {
+  background: #f59e0b;
+  color: #451a03;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+}
+
+#btn-toggle-start.is-paused:hover {
+  background: #fbbf24;
+  box-shadow: 0 6px 22px rgba(245, 158, 11, 0.55);
+}
+
+.btn-secondary {
+  background: var(--bg-surface);
+  color: var(--text-main);
+  min-width: 5rem;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-surface-hover);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px);
+}
+
+/* Custom Input Section */
+.custom-section {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.input-wrapper input[type="number"] {
+  width: 4.2rem;
+  padding: 0.65rem 0.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.6rem;
+  color: var(--text-main);
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-align: center;
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.input-wrapper input[type="number"]::-webkit-inner-spin-button,
+.input-wrapper input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.input-wrapper input[type="number"]:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+
+.unit-label {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  font-weight: 500;
+  user-select: none;
+}
+
+/* ==========================================================================
+   Status States & Animations
+   ========================================================================== */
+
+/* 1. Warning State (≤60s): Neon amber text & subtle 1s breathing pulse */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 0.88;
+  }
+}
+
+.state-warning #timer-display,
+body.state-warning #timer-display {
+  color: var(--timer-warning);
+  text-shadow: 0 0 50px var(--timer-warning-glow);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.state-warning #progress-bar,
+body.state-warning #progress-bar {
+  background: linear-gradient(90deg, #d97706, #fbbf24);
+}
+
+/* 2. Finished State (0s): Flashing alert screen & finished banner reveal */
+@keyframes flash-screen {
+  0%, 100% {
+    background-color: #0b0f19;
+  }
+  33% {
+    background-color: #991b1b;
+  }
+  66% {
+    background-color: #d97706;
+  }
+}
+
+@keyframes banner-entrance {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -25px) scale(0.85);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+body.state-finished,
+.state-finished {
+  animation: flash-screen 1.6s ease-in-out infinite;
+}
+
+.state-finished #timer-display,
+body.state-finished #timer-display {
+  color: #ffffff;
+  text-shadow: 0 0 50px rgba(239, 68, 68, 0.8);
+}
+
+.state-finished #progress-bar,
+body.state-finished #progress-bar {
+  background: #ef4444;
+}
+
+.state-finished #finish-banner,
+body.state-finished #finish-banner {
+  display: flex;
+  animation: banner-entrance 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 3. Controls Hidden State: Smooth fade out for mouse inactivity */
+body.controls-hidden .header-bar,
+body.controls-hidden .controls-bar,
+.controls-hidden .header-bar,
+.controls-hidden .controls-bar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+body.controls-hidden {
+  cursor: none;
+}
+
+/* ==========================================================================
+   Responsive Adaptations
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .header-bar {
+    padding: 1rem 1.5rem;
+  }
+
+  .controls-bar {
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .controls-section {
+    justify-content: center;
+  }
+
+  #finish-banner {
+    width: 90%;
+    padding: 1rem 1.5rem;
+    font-size: 1.4rem;
+    white-space: normal;
+  }
+}
