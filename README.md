@@ -5,6 +5,14 @@
 
 ---
 
+## 🔗 바로 사용하기 (Live Demo)
+
+- **배포 접속 링크**: [https://wbmaker2.github.io/class-timer/](https://wbmaker2.github.io/class-timer/)
+
+별도의 설치 없이 위 링크에 접속하여 교실 TV, 전자칠판, PC 브라우저에서 바로 사용하실 수 있습니다.
+
+---
+
 ## ✨ 주요 기능
 
 - 🔍 **초대형 고시인성 디스플레이**: 화면 비율에 따라 반응형으로 최대화되는 글꼴 크기(`min(28vw, 46vh)`), 폰트 폭 떨림 없는 고정폭 정렬(`tabular-nums`).
