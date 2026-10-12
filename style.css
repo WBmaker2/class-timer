@@ -360,6 +360,18 @@ html, body {
   box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
 }
 
+.input-wrapper input[type="number"].input-error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.35);
+  animation: shake 0.35s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
 .unit-label {
   color: var(--text-muted);
   font-size: 0.95rem;
