@@ -79,13 +79,24 @@ function createMockDOM() {
 
     dispatchEvent(evt) {
       const eventType = evt.type || evt;
+      let propagationStopped = false;
       const eventObj = typeof evt === 'string' ? { type: evt, target: this, preventDefault() {} } : evt;
       if (!eventObj.target) eventObj.target = this;
       if (!eventObj.preventDefault) eventObj.preventDefault = () => {};
+      const origStopProp = eventObj.stopPropagation;
+      eventObj.stopPropagation = () => {
+        propagationStopped = true;
+        if (origStopProp) origStopProp.call(eventObj);
+      };
 
       const handlers = this._eventListeners.get(eventType) || [];
       for (const h of handlers) {
         h(eventObj);
+      }
+
+      if (evt.bubbles !== false && !propagationStopped) {
+        mockDoc.dispatchEvent(eventObj);
+        mockWindow.dispatchEvent(eventObj);
       }
       return true;
     }
@@ -587,6 +598,39 @@ describe('Auto-hide Controls (Inactivity)', () => {
 
     app.destroy();
   });
+
+  test('countdown ticks do not postpone inactivity timer; auto-hide fires after timeout', async () => {
+    const mock = createMockDOM();
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: mock.storage,
+      inactivityTimeoutMs: 120
+    });
+
+    mock.elements['btn-toggle-start'].click();
+    assert.equal(mock.document.body.classList.contains('controls-hidden'), false);
+
+    // Simulate multiple countdown ticks firing over ~45ms
+    for (let i = 0; i < 3; i++) {
+      await new Promise(r => setTimeout(r, 15));
+      app.handleTick({
+        remainingSeconds: 300 - (i + 1),
+        totalDuration: 300,
+        isRunning: true,
+        isWarning: false,
+        isFinished: false
+      });
+      // Midway (~45ms < 120ms), controls should still be visible
+      assert.equal(mock.document.body.classList.contains('controls-hidden'), false);
+    }
+
+    // Wait for remaining time past 120ms
+    await new Promise(r => setTimeout(r, 110));
+    assert.equal(mock.document.body.classList.contains('controls-hidden'), true);
+
+    app.destroy();
+  });
 });
 
 describe('Keyboard Shortcuts', () => {
@@ -649,6 +693,68 @@ describe('Keyboard Shortcuts', () => {
     mock.window.dispatchEvent({ type: 'keydown', code: 'Escape', key: 'Escape' });
     await Promise.resolve();
     assert.equal(mock.document.fullscreenElement, null);
+    app.destroy();
+  });
+
+  test('shortcuts with modifier keys (Ctrl / Cmd / Alt) do not trigger timer actions', () => {
+    const mock = createMockDOM();
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: mock.storage
+    });
+
+    app.timer.remainingSeconds = 120;
+
+    // Ctrl+R should NOT reset timer
+    mock.window.dispatchEvent({ type: 'keydown', code: 'KeyR', key: 'r', ctrlKey: true });
+    assert.equal(app.timer.remainingSeconds, 120);
+
+    // Cmd+R (metaKey) should NOT reset timer
+    mock.window.dispatchEvent({ type: 'keydown', code: 'KeyR', key: 'r', metaKey: true });
+    assert.equal(app.timer.remainingSeconds, 120);
+
+    // Alt+R should NOT reset timer
+    mock.window.dispatchEvent({ type: 'keydown', code: 'KeyR', key: 'r', altKey: true });
+    assert.equal(app.timer.remainingSeconds, 120);
+
+    // Ctrl+F should NOT toggle fullscreen
+    mock.window.dispatchEvent({ type: 'keydown', code: 'KeyF', key: 'f', ctrlKey: true });
+    assert.equal(mock.document.fullscreenElement, null);
+
+    // Cmd+Space should NOT toggle timer
+    mock.window.dispatchEvent({ type: 'keydown', code: 'Space', key: ' ', metaKey: true });
+    assert.equal(app.timer.isRunning, false);
+
+    app.destroy();
+  });
+
+  test('pressing Space on activity title triggers editing without toggling timer', () => {
+    const mock = createMockDOM();
+    let promptOpened = false;
+    mock.window.prompt = () => {
+      promptOpened = true;
+      return '새로운 활동 제목';
+    };
+
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: mock.storage
+    });
+
+    mock.elements['activity-title'].focus();
+    mock.elements['activity-title'].dispatchEvent({
+      type: 'keydown',
+      code: 'Space',
+      key: ' ',
+      bubbles: true
+    });
+
+    assert.equal(promptOpened, true);
+    assert.equal(app.timer.isRunning, false);
+    assert.equal(mock.elements['activity-title'].textContent, '새로운 활동 제목');
+
     app.destroy();
   });
 });

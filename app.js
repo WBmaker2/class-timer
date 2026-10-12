@@ -25,6 +25,7 @@ export class AppController {
     this.sound = customSound || new SoundEngine();
     this.inactivityTimer = null;
     this.audioInitialized = false;
+    this._wasRunning = false;
 
     // Cache element references
     this._bindElements();
@@ -137,6 +138,7 @@ export class AppController {
     this._setActivePreset(seconds);
     this._clearCustomInputs();
     this.clearInactivityTimer();
+    this._wasRunning = false;
     if (this.doc && this.doc.body) {
       this.doc.body.classList.remove('controls-hidden');
     }
@@ -157,6 +159,7 @@ export class AppController {
         this._clearActivePresets();
       }
       this.clearInactivityTimer();
+      this._wasRunning = false;
       if (this.doc && this.doc.body) {
         this.doc.body.classList.remove('controls-hidden');
       }
@@ -191,6 +194,7 @@ export class AppController {
   resetTimer() {
     this.initAudio();
     this.timer.reset();
+    this._wasRunning = false;
     if (this.doc && this.doc.body) {
       this.doc.body.classList.remove('state-warning', 'state-finished', 'controls-hidden');
     }
@@ -322,13 +326,16 @@ export class AppController {
       }
     }
 
-    // Auto-hide controls sync
-    if (state.isRunning) {
-      this.scheduleInactivityTimer();
-    } else {
-      this.clearInactivityTimer();
-      if (this.doc.body) {
-        this.doc.body.classList.remove('controls-hidden');
+    // Auto-hide controls sync: only trigger on running state transitions
+    if (state.isRunning !== this._wasRunning) {
+      this._wasRunning = state.isRunning;
+      if (state.isRunning) {
+        this.scheduleInactivityTimer();
+      } else {
+        this.clearInactivityTimer();
+        if (this.doc.body) {
+          this.doc.body.classList.remove('controls-hidden');
+        }
       }
     }
   }
@@ -369,11 +376,16 @@ export class AppController {
   }
 
   handleKeydown(e) {
+    // Ignore key combinations with modifier keys (Ctrl / Cmd / Alt) to prevent
+    // hijacking browser shortcuts like reload (Ctrl+R), find (Ctrl+F), etc.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
     const active = this.doc ? this.doc.activeElement : null;
     const isInput = active && (
       active.tagName === 'INPUT' ||
       active.tagName === 'TEXTAREA' ||
-      active.isContentEditable
+      active.isContentEditable ||
+      active === this.activityTitle
     );
 
     // Escape exits fullscreen if fullscreen is active
@@ -475,6 +487,7 @@ export class AppController {
       this._titleKeyHandler = (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           if (typeof e.preventDefault === 'function') e.preventDefault();
+          if (typeof e.stopPropagation === 'function') e.stopPropagation();
           this.editActivityTitle();
         }
       };
