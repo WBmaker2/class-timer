@@ -19,13 +19,26 @@ export class AppController {
   } = {}) {
     this.doc = customDocument || (typeof document !== 'undefined' ? document : null);
     this.win = customWindow || (typeof window !== 'undefined' ? window : null);
-    this.storage = customStorage || (typeof localStorage !== 'undefined' ? localStorage : null);
+
+    let defaultStorage = null;
+    try {
+      if (typeof localStorage !== 'undefined') defaultStorage = localStorage;
+    } catch {
+      // Restricted iframe or disabled storage fallback
+    }
+    this.storage = customStorage || defaultStorage;
     this.inactivityTimeoutMs = inactivityTimeoutMs;
 
     this.sound = customSound || new SoundEngine();
     this.inactivityTimer = null;
     this.audioInitialized = false;
     this._wasRunning = false;
+
+    // Cache tracking for minimal DOM mutations
+    this._lastDisplayedTime = null;
+    this._lastPercent = null;
+    this._lastAriaPercent = null;
+    this._lastActivityReschedule = 0;
 
     // Cache element references
     this._bindElements();
@@ -226,17 +239,27 @@ export class AppController {
     this.btnMute.setAttribute('title', isMuted ? '음소거 해제' : '음소거 토글');
   }
 
+  _getFullscreenElement() {
+    if (!this.doc) return null;
+    return this.doc.fullscreenElement || this.doc.webkitFullscreenElement || null;
+  }
+
   async toggleFullscreen() {
     if (!this.doc) return;
     try {
-      if (this.doc.fullscreenElement) {
-        if (this.doc.exitFullscreen) {
-          await this.doc.exitFullscreen();
+      const fsEl = this._getFullscreenElement();
+      if (fsEl) {
+        const exitFn = this.doc.exitFullscreen || this.doc.webkitExitFullscreen;
+        if (exitFn) {
+          await exitFn.call(this.doc);
         }
       } else {
         const root = this.doc.documentElement;
-        if (root && root.requestFullscreen) {
-          await root.requestFullscreen();
+        if (root) {
+          const reqFn = root.requestFullscreen || root.webkitRequestFullscreen;
+          if (reqFn) {
+            await reqFn.call(root);
+          }
         }
       }
     } catch {
@@ -247,7 +270,7 @@ export class AppController {
 
   _updateFullscreenButton() {
     if (!this.btnFullscreen || !this.doc) return;
-    const isFullscreen = Boolean(this.doc.fullscreenElement);
+    const isFullscreen = Boolean(this._getFullscreenElement());
     this.btnFullscreen.textContent = isFullscreen ? '⤓' : '⛶';
     this.btnFullscreen.setAttribute('aria-label', isFullscreen ? '전체화면 종료' : '전체화면 토글');
     this.btnFullscreen.setAttribute('title', isFullscreen ? '전체화면 종료' : '전체화면 토글');
@@ -273,56 +296,85 @@ export class AppController {
   }
 
   handleTick(state) {
-    this._syncState(state);
+    this._updateDisplay(state);
   }
 
   handleStateChange(state) {
-    this._syncState(state);
+    this._updateDisplay(state);
+    this._updateStateClassesAndControls(state);
   }
 
-  _syncState(state) {
+  _updateDisplay(state) {
     if (!this.doc) return;
 
-    // Display formatted time
-    if (this.timerDisplay) {
-      this.timerDisplay.textContent = formatTime(state.remainingSeconds);
+    // Display formatted time (only mutate DOM if string changed)
+    const formatted = formatTime(state.remainingSeconds);
+    if (this.timerDisplay && this._lastDisplayedTime !== formatted) {
+      this._lastDisplayedTime = formatted;
+      this.timerDisplay.textContent = formatted;
     }
 
-    // Progress bar width
+    // Progress bar width & aria attributes (only mutate DOM if changed)
     if (this.progressBar) {
       const pct = state.totalDuration > 0
         ? (state.remainingSeconds / state.totalDuration) * 100
         : 0;
       const clampedPct = Math.max(0, Math.min(100, pct));
-      this.progressBar.style.width = `${clampedPct}%`;
-      if (this.progressBarContainer) {
-        this.progressBarContainer.setAttribute('aria-valuenow', String(Math.round(clampedPct)));
+      if (this._lastPercent !== clampedPct) {
+        this._lastPercent = clampedPct;
+        this.progressBar.style.width = `${clampedPct}%`;
+      }
+      const roundedPct = Math.round(clampedPct);
+      if (this.progressBarContainer && this._lastAriaPercent !== roundedPct) {
+        this._lastAriaPercent = roundedPct;
+        this.progressBarContainer.setAttribute('aria-valuenow', String(roundedPct));
       }
     }
+  }
+
+  _updateStateClassesAndControls(state) {
+    if (!this.doc) return;
 
     // Toggle start button text & class
     if (this.btnToggleStart) {
       if (state.isRunning) {
-        this.btnToggleStart.textContent = '일시정지';
-        this.btnToggleStart.setAttribute('aria-label', '일시정지');
-        this.btnToggleStart.classList.add('is-paused');
+        if (this.btnToggleStart.textContent !== '일시정지') {
+          this.btnToggleStart.textContent = '일시정지';
+          this.btnToggleStart.setAttribute('aria-label', '일시정지');
+          this.btnToggleStart.classList.add('is-paused');
+        }
       } else {
-        this.btnToggleStart.textContent = '시작';
-        this.btnToggleStart.setAttribute('aria-label', '시작');
-        this.btnToggleStart.classList.remove('is-paused');
+        if (this.btnToggleStart.textContent !== '시작') {
+          this.btnToggleStart.textContent = '시작';
+          this.btnToggleStart.setAttribute('aria-label', '시작');
+          this.btnToggleStart.classList.remove('is-paused');
+        }
       }
     }
 
     // Body state classes
     if (this.doc.body) {
       if (state.isWarning) {
-        this.doc.body.classList.add('state-warning');
-        this.doc.body.classList.remove('state-finished');
+        if (!this.doc.body.classList.contains('state-warning')) {
+          this.doc.body.classList.add('state-warning');
+        }
+        if (this.doc.body.classList.contains('state-finished')) {
+          this.doc.body.classList.remove('state-finished');
+        }
       } else if (state.isFinished) {
-        this.doc.body.classList.add('state-finished');
-        this.doc.body.classList.remove('state-warning');
+        if (!this.doc.body.classList.contains('state-finished')) {
+          this.doc.body.classList.add('state-finished');
+        }
+        if (this.doc.body.classList.contains('state-warning')) {
+          this.doc.body.classList.remove('state-warning');
+        }
       } else {
-        this.doc.body.classList.remove('state-warning', 'state-finished');
+        if (this.doc.body.classList.contains('state-warning')) {
+          this.doc.body.classList.remove('state-warning');
+        }
+        if (this.doc.body.classList.contains('state-finished')) {
+          this.doc.body.classList.remove('state-finished');
+        }
       }
     }
 
@@ -330,14 +382,20 @@ export class AppController {
     if (state.isRunning !== this._wasRunning) {
       this._wasRunning = state.isRunning;
       if (state.isRunning) {
+        this._lastActivityReschedule = Date.now();
         this.scheduleInactivityTimer();
       } else {
         this.clearInactivityTimer();
-        if (this.doc.body) {
+        if (this.doc.body && this.doc.body.classList.contains('controls-hidden')) {
           this.doc.body.classList.remove('controls-hidden');
         }
       }
     }
+  }
+
+  _syncState(state) {
+    this._updateDisplay(state);
+    this._updateStateClassesAndControls(state);
   }
 
   handleWarning() {
@@ -367,11 +425,16 @@ export class AppController {
   }
 
   handleUserActivity() {
-    if (this.doc && this.doc.body) {
+    if (this.doc && this.doc.body && this.doc.body.classList.contains('controls-hidden')) {
       this.doc.body.classList.remove('controls-hidden');
     }
     if (this.timer && this.timer.isRunning) {
-      this.scheduleInactivityTimer();
+      const now = Date.now();
+      const throttleInterval = Math.min(150, Math.floor(this.inactivityTimeoutMs / 2));
+      if (!this._lastActivityReschedule || (now - this._lastActivityReschedule >= throttleInterval)) {
+        this._lastActivityReschedule = now;
+        this.scheduleInactivityTimer();
+      }
     }
   }
 
@@ -390,9 +453,11 @@ export class AppController {
 
     // Escape exits fullscreen if fullscreen is active
     if (e.code === 'Escape' || e.key === 'Escape') {
-      if (this.doc && this.doc.fullscreenElement) {
-        if (this.doc.exitFullscreen) {
-          this.doc.exitFullscreen().catch?.(() => {});
+      const fsEl = this._getFullscreenElement();
+      if (fsEl) {
+        const exitFn = this.doc.exitFullscreen || this.doc.webkitExitFullscreen;
+        if (exitFn) {
+          exitFn.call(this.doc)?.catch?.(() => {});
         }
       }
       return;
@@ -478,6 +543,7 @@ export class AppController {
     if (this.doc) {
       this._fullscreenChangeHandler = () => this._updateFullscreenButton();
       this.doc.addEventListener('fullscreenchange', this._fullscreenChangeHandler);
+      this.doc.addEventListener('webkitfullscreenchange', this._fullscreenChangeHandler);
     }
 
     // Activity Title editing
@@ -529,6 +595,7 @@ export class AppController {
     if (this.doc) {
       this.doc.removeEventListener('focusin', this._activityHandler);
       this.doc.removeEventListener('fullscreenchange', this._fullscreenChangeHandler);
+      this.doc.removeEventListener('webkitfullscreenchange', this._fullscreenChangeHandler);
     }
   }
 }

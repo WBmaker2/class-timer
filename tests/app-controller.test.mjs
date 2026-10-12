@@ -458,6 +458,38 @@ describe('Mute and Fullscreen Controls', () => {
     await mock.document.exitFullscreen();
     assert.equal(mock.elements['btn-fullscreen'].textContent, '⛶');
   });
+
+  test('supports WebKit vendor prefix fallback for fullscreen', async () => {
+    const mock = createMockDOM();
+    delete mock.document.fullscreenElement;
+    delete mock.document.documentElement.requestFullscreen;
+    delete mock.document.exitFullscreen;
+
+    mock.document.webkitFullscreenElement = null;
+    mock.document.documentElement.webkitRequestFullscreen = async () => {
+      mock.document.webkitFullscreenElement = mock.document.documentElement;
+      mock.document.dispatchEvent({ type: 'webkitfullscreenchange' });
+    };
+    mock.document.webkitExitFullscreen = async () => {
+      mock.document.webkitFullscreenElement = null;
+      mock.document.dispatchEvent({ type: 'webkitfullscreenchange' });
+    };
+
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: mock.storage
+    });
+
+    mock.elements['btn-fullscreen'].click();
+    await Promise.resolve();
+
+    assert.equal(mock.elements['btn-fullscreen'].textContent, '⤓');
+
+    await mock.document.webkitExitFullscreen();
+    assert.equal(mock.elements['btn-fullscreen'].textContent, '⛶');
+    app.destroy();
+  });
 });
 
 describe('Activity Title Editing & LocalStorage', () => {
@@ -488,6 +520,26 @@ describe('Activity Title Editing & LocalStorage', () => {
 
     mock.elements['activity-title'].click();
     assert.equal(mock.elements['activity-title'].textContent, '수업 활동 시간');
+  });
+
+  test('gracefully handles restricted localStorage throwing SecurityError', () => {
+    const mock = createMockDOM();
+    const throwingStorage = {
+      getItem: () => { throw new Error('SecurityError: Access denied'); },
+      setItem: () => { throw new Error('SecurityError: Access denied'); }
+    };
+    mock.window.promptReturn = '수학 문제 풀이';
+
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: throwingStorage
+    });
+
+    assert.doesNotThrow(() => {
+      mock.elements['activity-title'].click();
+    });
+    assert.equal(mock.elements['activity-title'].textContent, '수학 문제 풀이');
   });
 });
 
@@ -547,6 +599,31 @@ describe('State Synchronization & Audio Triggers', () => {
 
     app.handleFinish();
     assert.equal(finishChimeFired, true);
+  });
+
+  test('handleTick updates display text and progress bar without mutating button text or body classes', () => {
+    const mock = createMockDOM();
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: mock.storage
+    });
+
+    // Manually tweak button text to verify that handleTick does NOT touch button text
+    mock.elements['btn-toggle-start'].textContent = '커스텀상태';
+
+    app.handleTick({
+      remainingSeconds: 180,
+      totalDuration: 300,
+      isRunning: true,
+      isWarning: false,
+      isFinished: false
+    });
+
+    assert.equal(mock.elements['timer-display'].textContent, '03:00');
+    assert.equal(mock.elements['progress-bar'].style.width, '60%');
+    assert.equal(mock.elements['btn-toggle-start'].textContent, '커스텀상태');
+    assert.equal(mock.document.body.classList.contains('state-warning'), false);
   });
 });
 
@@ -627,6 +704,32 @@ describe('Auto-hide Controls (Inactivity)', () => {
 
     // Wait for remaining time past 120ms
     await new Promise(r => setTimeout(r, 110));
+    assert.equal(mock.document.body.classList.contains('controls-hidden'), true);
+
+    app.destroy();
+  });
+
+  test('throttles inactivity timer reset on continuous mouse movements', async () => {
+    const mock = createMockDOM();
+    const app = new AppController({
+      document: mock.document,
+      window: mock.window,
+      storage: mock.storage,
+      inactivityTimeoutMs: 120
+    });
+
+    mock.elements['btn-toggle-start'].click();
+
+    // Fire 20 high-frequency mousemove events within 20ms
+    for (let i = 0; i < 20; i++) {
+      mock.window.dispatchEvent({ type: 'mousemove' });
+    }
+
+    // Controls must still be visible and timer must not crash
+    assert.equal(mock.document.body.classList.contains('controls-hidden'), false);
+
+    // Wait past inactivity timeout
+    await new Promise(r => setTimeout(r, 140));
     assert.equal(mock.document.body.classList.contains('controls-hidden'), true);
 
     app.destroy();
